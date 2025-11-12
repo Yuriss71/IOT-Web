@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="fr" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-store" />
+    <title>Dashboard • IOT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="min-h-screen bg-neutral-950 text-neutral-100 p-6">
+    <header class="max-w-4xl mx-auto flex items-center justify-between">
+      <h1 class="text-2xl font-semibold">Dashboard</h1>
+      <div class="flex items-center gap-3">
+        <button id="logout" class="rounded-lg bg-neutral-800 px-3 py-2 border border-neutral-700 hover:bg-neutral-700">Logout</button>
+      </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto mt-6 grid md:grid-cols-3 gap-6">
+      <section class="md:col-span-1 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+        <h2 class="font-medium mb-3">Ajouter un PIN</h2>
+        <form id="addForm" class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <input id="pinInput" placeholder="PIN" class="w-full rounded-lg bg-neutral-800 border border-neutral-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-neutral-500" />
+          <button class="rounded-lg bg-neutral-100 text-neutral-900 font-medium px-4 py-2 hover:bg-white sm:h-full">Ajouter</button>
+        </form>
+        <p id="addDeviceError" class="text-sm text-red-400 mt-2 hidden"></p>
+      </section>
+
+      <section class="md:col-span-2 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-medium">Mes devices</h2>
+          <span id="websocketStatus" class="text-sm text-neutral-400">WS: ...</span>
+        </div>
+        <ul id="deviceList" class="mt-3 space-y-2"></ul>
+      </section>
+
+      <section class="md:col-span-3 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+        <h2 class="font-medium mb-3">Logs</h2>
+        <pre id="logOutput" class="text-sm whitespace-pre-wrap"></pre>
+      </section>
+    </main>
+
+    <script>
+      const deviceList = document.getElementById('deviceList');
+      const logOutput = document.getElementById('logOutput');
+      const websocketStatus = document.getElementById('websocketStatus');
+      const addDeviceError = document.getElementById('addDeviceError');
+      const deviceMap = new Map(); // pin -> {count}
+
+      async function apiFetch(url, options = {}) {
+        const opts = { credentials: 'include', ...options };
+        opts.headers = Object.assign({ Accept: 'application/json' }, options.headers || {});
+        if (opts.body && !('Content-Type' in opts.headers)) {
+          opts.headers['Content-Type'] = 'application/json';
+        }
+        const response = await fetch(url, opts);
+        if (response.status === 401) {
+          location.href = '/login';
+          throw new Error('Unauthorized');
+        }
+        return response;
+      }
+
+      document.getElementById('logout').onclick = async () => {
+        try {
+          await apiFetch('/api/auth/logout', { method: 'POST' });
+        } catch (_) {
+        } finally {
+          location.href = '/login';
+        }
+      };
+
+      function renderDevices(deviceRecords) {
+        deviceList.innerHTML = '';
+        deviceMap.clear();
+        const pins = [];
+        deviceRecords.forEach((device) => {
+          deviceMap.set(device.pin, { count: device.current_count });
+          pins.push(device.pin);
+          const item = document.createElement('li');
+          item.className = 'rounded-xl bg-neutral-800 border border-neutral-700 px-3 py-2 flex items-center justify-between';
+          item.id = `pin-${device.pin}`;
+          item.innerHTML = `<span class='font-mono'>${device.pin}</span><span class='text-sm text-neutral-300'>count: <b id='count-${device.pin}'>${device.current_count}</b></span>`;
+          deviceList.appendChild(item);
+        });
+        return pins;
+      }
+
+      async function loadDevices() {
+        const response = await apiFetch('/api/devices');
+        if (!response.ok) throw new Error('Erreur API');
+        const deviceRecords = await response.json();
+        return renderDevices(deviceRecords);
+      }
+
+      function formatLog(entry) {
+        const timestamp = new Date(entry.timestamp * 1000).toLocaleTimeString();
+        return `[${timestamp}] pin=${entry.pin} change=${entry.change} new=${entry.new_count}`;
+      }
+
+      function prependLog(entry) {
+        const formatted = formatLog(entry);
+        logOutput.textContent = formatted + '\n' + logOutput.textContent;
+      }
+
+      async function loadInitialLogs(pins) {
+        if (!pins.length) {
+          logOutput.textContent = '';
+          return;
+        }
+        const collectedLogs = [];
+        for (const pin of pins) {
+          try {
+            const response = await apiFetch(`/api/logs/${encodeURIComponent(pin)}?limit=50`);
+            if (!response.ok) continue;
+            const logEntries = await response.json();
+            logEntries.forEach((entry) => collectedLogs.push(entry));
+          } catch (_) {
+          }
+        }
+        collectedLogs.sort((a, b) => b.timestamp - a.timestamp);
+        logOutput.textContent = collectedLogs.map(formatLog).join('\n');
+      }
+
+      document.getElementById('addForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        addDeviceError.classList.add('hidden');
+        const pin = document.getElementById('pinInput').value.trim();
+        if (!pin) return;
+        try {
+          const response = await apiFetch('/api/devices', {
+            method: 'POST',
+            body: JSON.stringify({ pin })
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({ detail: 'Erreur' }));
+            throw new Error(payload.detail || 'Erreur');
+          }
+          document.getElementById('pinInput').value = '';
+          const pins = await loadDevices();
+          await loadInitialLogs(pins);
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ pins }));
+          }
+        } catch (error) {
+          addDeviceError.textContent = error.message || 'Erreur';
+          addDeviceError.classList.remove('hidden');
+        }
+      });
+
+      let socket = null;
+      let heartbeatTimer = null;
+
+      function connectWebsocket(pins) {
+        socket = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+        socket.onopen = () => {
+          websocketStatus.textContent = 'WS: connecté';
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
+          heartbeatTimer = setInterval(() => {
+            if (socket && socket.readyState === WebSocket.OPEN) socket.send('ping');
+          }, 15000);
+          if (pins && pins.length) socket.send(JSON.stringify({ pins }));
+        };
+        socket.onclose = () => {
+          websocketStatus.textContent = 'WS: déconnecté';
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
+        };
+        socket.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            if (message.type === 'subscribed') return;
+            const { pin, change, new_count } = message;
+            if (deviceMap.has(pin)) {
+              deviceMap.get(pin).count = new_count;
+              const counter = document.getElementById('count-' + pin);
+              if (counter) counter.textContent = new_count;
+            }
+            prependLog(message);
+          } catch (_) {
+          }
+        };
+      }
+
+      (async () => {
+        try {
+          const pins = await loadDevices();
+          await loadInitialLogs(pins);
+          connectWebsocket(pins);
+        } catch (error) {
+          if (error.message !== 'Unauthorized') {
+            addDeviceError.textContent = error.message || 'Erreur';
+            addDeviceError.classList.remove('hidden');
+          }
+        }
+      })();
+    </script>
+  </body>
+  </html>

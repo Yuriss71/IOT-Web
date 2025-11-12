@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="fr" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-store" />
+    <title>Register • IOT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center p-6">
+    <div class="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6 shadow-xl">
+      <h1 class="text-2xl font-semibold mb-6">Créer un compte</h1>
+      <form class="space-y-4" method="post" action="/register">
+        <div>
+          <label class="block text-sm mb-1">Username</label>
+          <input id="username" name="username" required class="w-full rounded-lg bg-neutral-800 border border-neutral-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-neutral-500" />
+        </div>
+        <div>
+          <label class="block text-sm mb-1">Password</label>
+          <input id="password" name="password" type="password" required class="w-full rounded-lg bg-neutral-800 border border-neutral-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-neutral-500" />
+        </div>
+        <button class="w-full rounded-lg bg-neutral-100 text-neutral-900 font-medium py-2 hover:bg-white">Register</button>
+      </form>
+      <p class="text-sm text-neutral-400 mt-4">Déjà un compte ? <a href="/login" class="underline">Se connecter</a></p>
+      <p id="errorMessage" class="text-sm text-red-400 mt-3 hidden"></p>
+    </div>
+    <script>
+      const errorMessage = document.getElementById('errorMessage');
+      const errorCode = new URLSearchParams(location.search).get('err');
+      if (errorCode === '1') {
+        errorMessage.textContent = 'Username et mot de passe sont obligatoires';
+        errorMessage.classList.remove('hidden');
+      } else if (errorCode === '2') {
+        errorMessage.textContent = 'Username déjà utilisé';
+        errorMessage.classList.remove('hidden');
+      }
+      if (errorCode) {
+        history.replaceState(null, '', location.pathname);
+      }
+      document.getElementById('username').focus();
+    </script>
+  </body>
+  </html>
