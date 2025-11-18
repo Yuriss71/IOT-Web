@@ -12,14 +12,6 @@ def connect():
     return conn
 
 
-def _ensure_device_mode_column(cursor):
-    cursor.execute("PRAGMA table_info(devices)")
-    columns = {row[1] for row in cursor.fetchall()}
-    if "mode" not in columns:
-        cursor.execute(
-            "ALTER TABLE devices ADD COLUMN mode TEXT NOT NULL DEFAULT 'increment'"
-        )
-
 def init_db() -> None:
     with connect() as conn:
         cursor = conn.cursor()
@@ -37,17 +29,12 @@ def init_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS devices (
                 pin TEXT PRIMARY KEY,
-<<<<<<< HEAD
                 enabled BOOLEAN NOT NULL DEFAULT 1,
-                current_count INTEGER NOT NULL DEFAULT 0
-=======
                 current_count INTEGER NOT NULL DEFAULT 0,
                 mode TEXT NOT NULL DEFAULT 'increment'
->>>>>>> d064c9dc0bfb0fd32b7f3a28c77ccb97fdd1b2b9
             )
             """
         )
-        _ensure_device_mode_column(cursor)
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS user_devices (
@@ -216,7 +203,6 @@ def list_user_pins(user_id: int):
         rows = conn.execute(
             """
             SELECT d.pin, d.current_count, d.enabled d.mode
->>>>>>> d064c9dc0bfb0fd32b7f3a28c77ccb97fdd1b2b9
             FROM devices d
             JOIN user_devices ud ON ud.pin = d.pin
             WHERE ud.user_id = ?

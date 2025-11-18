@@ -18,11 +18,10 @@ from app.db import (
     link_pin_to_user,
     list_user_pins,
     set_user_rfid,
-)
-from app.mqtt import mqtt_consumer, publish_reset
-from app.ws import router as ws_router
     set_device_mode,
 )
+from app.mqtt import mqtt_consumer, publish_reset
+from app.ws import router as ws_router, broadcast
 from app.mqtt import mqtt_consumer
 from app.ws import router as ws_router, broadcast
 
