@@ -129,7 +129,6 @@ def set_user_pins_enabled(pin: str, enabled: bool):
             UPDATE devices
             SET enabled = ?
             WHERE pin IN (
-                -- On joint la table sur elle-même pour trouver les frères/soeurs du pin
                 SELECT target.pin 
                 FROM user_devices AS target
                 JOIN user_devices AS source ON target.user_id = source.user_id
