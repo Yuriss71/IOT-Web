@@ -93,9 +93,20 @@
       }
 
       function formatLog(entry) {
-        const timestamp = new Date(entry.timestamp * 1000).toLocaleTimeString();
-        return `[${timestamp}] pin=${entry.pin} change=${entry.change} new=${entry.new_count}`;
+          const timestamp = new Date(entry.ts * 1000).toLocaleTimeString();
+          let changeText = '';
+
+          if (entry.change > 0) {
+              changeText = `➕ ${entry.change} entrée${entry.change > 1 ? 's' : ''}`;
+          } else if (entry.change < 0) {
+              changeText = `➖ ${Math.abs(entry.change)} entrée${Math.abs(entry.change) > 1 ? 's' : ''}`;
+          } else {
+              changeText = '0 changement';
+          }
+
+          return `[${timestamp}] Pin ${entry.pin} : ${changeText}, nouveau total = ${entry.new_count}`;
       }
+
 
       function prependLog(entry) {
         const formatted = formatLog(entry);
