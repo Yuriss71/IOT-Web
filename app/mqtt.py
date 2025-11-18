@@ -49,7 +49,6 @@ async def mqtt_consumer():
                         if enabled_state.get(pin, True) is False:
                             continue
 
-<<<<<<< HEAD
                         # try:
                         #     change = int(payload.get("change", 0))
                         # except Exception:
@@ -58,17 +57,6 @@ async def mqtt_consumer():
                         #     continue
                         mode = get_device_mode(pin)
                         change = 1 if mode == "increment" else -1
-=======
-                        try:
-                            change = int(payload.get("change", 0))
-                        except Exception:
-                            continue
-
-                        if change not in (-1, 1):
-                            continue
-
-                        print(f"PIN {pin} -> CHANGE {change}")
->>>>>>> 61e986ffc2908ee2d3be5203008725d396c4816f
                         new_count = apply_change(pin=pin, change=change, ts=ts)
                         await broadcast(
                             {
