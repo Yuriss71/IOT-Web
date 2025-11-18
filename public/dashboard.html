@@ -44,7 +44,16 @@
       const logOutput = document.getElementById('logOutput');
       const websocketStatus = document.getElementById('websocketStatus');
       const addDeviceError = document.getElementById('addDeviceError');
-      const deviceMap = new Map(); // pin -> {count}
+      const deviceMap = new Map(); // pin -> { count, mode }
+
+      const MODE_LABELS = {
+        increment: 'Increment (+1)',
+        decrement: 'Decrement (-1)'
+      };
+
+      function describeMode(mode) {
+        return MODE_LABELS[mode] || MODE_LABELS.increment;
+      }
 
       async function apiFetch(url, options = {}) {
         const opts = { credentials: 'include', ...options };
@@ -74,12 +83,43 @@
         deviceMap.clear();
         const pins = [];
         deviceRecords.forEach((device) => {
-          deviceMap.set(device.pin, { count: device.current_count });
+          const mode = (device.mode || 'increment').toLowerCase() === 'decrement' ? 'decrement' : 'increment';
+          deviceMap.set(device.pin, { count: device.current_count, mode });
           pins.push(device.pin);
           const item = document.createElement('li');
-          item.className = 'rounded-xl bg-neutral-800 border border-neutral-700 px-3 py-2 flex items-center justify-between';
+          item.className = 'rounded-xl bg-neutral-800 border border-neutral-700 px-3 py-2 flex items-center justify-between gap-3 flex-wrap';
           item.id = `pin-${device.pin}`;
-          item.innerHTML = `<span class='font-mono'>${device.pin}</span><span class='text-sm text-neutral-300'>count: <b id='count-${device.pin}'>${device.current_count}</b></span>`;
+
+          const infoWrapper = document.createElement('div');
+          infoWrapper.className = 'flex flex-col gap-1';
+
+          const pinLabel = document.createElement('span');
+          pinLabel.className = 'font-mono text-base';
+          pinLabel.textContent = device.pin;
+
+          const countLabel = document.createElement('span');
+          countLabel.className = 'text-sm text-neutral-300';
+          countLabel.innerHTML = `count: <b id='count-${device.pin}'>${device.current_count}</b>`;
+
+          const modeLabel = document.createElement('span');
+          modeLabel.className = 'text-xs text-neutral-400';
+          modeLabel.id = `mode-${device.pin}`;
+          modeLabel.textContent = `Mode actuel: ${describeMode(mode)}`;
+
+          infoWrapper.append(pinLabel, countLabel, modeLabel);
+
+          const actionsWrapper = document.createElement('div');
+          actionsWrapper.className = 'flex items-center gap-2 flex-wrap justify-end';
+
+          const toggleButton = document.createElement('button');
+          toggleButton.className = 'rounded-lg bg-neutral-100 text-neutral-900 font-medium px-3 py-2 text-sm hover:bg-white transition disabled:opacity-60';
+          toggleButton.id = `toggle-${device.pin}`;
+          toggleButton.textContent = `Basculer (${describeMode(mode)})`;
+          toggleButton.addEventListener('click', () => toggleDeviceMode(device.pin));
+
+          actionsWrapper.append(toggleButton);
+
+          item.append(infoWrapper, actionsWrapper);
           deviceList.appendChild(item);
         });
         return pins;
@@ -92,8 +132,16 @@
         return renderDevices(deviceRecords);
       }
 
+      function resolveTimestamp(entry) {
+        if (!entry) return Math.floor(Date.now() / 1000);
+        if (typeof entry.timestamp === 'number') return entry.timestamp;
+        if (typeof entry.ts === 'number') return entry.ts;
+        return Math.floor(Date.now() / 1000);
+      }
+
       function formatLog(entry) {
-        const timestamp = new Date(entry.timestamp * 1000).toLocaleTimeString();
+        const ts = resolveTimestamp(entry);
+        const timestamp = new Date(ts * 1000).toLocaleTimeString();
         return `[${timestamp}] pin=${entry.pin} change=${entry.change} new=${entry.new_count}`;
       }
 
@@ -117,8 +165,47 @@
           } catch (_) {
           }
         }
-        collectedLogs.sort((a, b) => b.timestamp - a.timestamp);
+        collectedLogs.sort((a, b) => resolveTimestamp(b) - resolveTimestamp(a));
         logOutput.textContent = collectedLogs.map(formatLog).join('\n');
+      }
+
+      function updateDeviceCountUI(pin, newCount) {
+        const counter = document.getElementById('count-' + pin);
+        if (counter) counter.textContent = newCount;
+      }
+
+      function updateDeviceModeUI(pin, mode) {
+        const normalized = mode === 'decrement' ? 'decrement' : 'increment';
+        const label = document.getElementById(`mode-${pin}`);
+        if (label) label.textContent = `Mode actuel: ${describeMode(normalized)}`;
+        const button = document.getElementById(`toggle-${pin}`);
+        if (button) button.textContent = `Basculer (${describeMode(normalized)})`;
+      }
+
+      async function toggleDeviceMode(pin) {
+        const device = deviceMap.get(pin);
+        if (!device) return;
+        const button = document.getElementById(`toggle-${pin}`);
+        const nextMode = device.mode === 'increment' ? 'decrement' : 'increment';
+        if (button) button.disabled = true;
+        try {
+          const response = await apiFetch(`/api/devices/${encodeURIComponent(pin)}/mode`, {
+            method: 'POST',
+            body: JSON.stringify({ mode: nextMode })
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({ detail: 'Erreur API' }));
+            throw new Error(payload.detail || 'Erreur API');
+          }
+          const payload = await response.json();
+          const updatedMode = ((payload.mode || nextMode) === 'decrement') ? 'decrement' : 'increment';
+          device.mode = updatedMode;
+          updateDeviceModeUI(pin, updatedMode);
+        } catch (error) {
+          alert(error.message || 'Impossible de changer de mode');
+        } finally {
+          if (button) button.disabled = false;
+        }
       }
 
       document.getElementById('addForm').addEventListener('submit', async (event) => {
@@ -171,8 +258,7 @@
             const { pin, change, new_count } = message;
             if (deviceMap.has(pin)) {
               deviceMap.get(pin).count = new_count;
-              const counter = document.getElementById('count-' + pin);
-              if (counter) counter.textContent = new_count;
+              updateDeviceCountUI(pin, new_count);
             }
             prependLog(message);
           } catch (_) {

@@ -8,15 +8,19 @@ from starlette.staticfiles import StaticFiles
 
 from app.auth import authenticate_user, register_user, issue_token, verify_token
 from app.config import JWT_EXP_SECONDS
+import time
+
 from app.db import (
+    apply_change,
     get_current_count,
     get_logs,
     init_db,
     link_pin_to_user,
     list_user_pins,
+    set_device_mode,
 )
 from app.mqtt import mqtt_consumer
-from app.ws import router as ws_router
+from app.ws import router as ws_router, broadcast
 
 import uvicorn
 
@@ -164,6 +168,60 @@ async def api_add_device(request: Request, body: dict):
         raise HTTPException(status_code=400, detail="pin required")
     link_pin_to_user(uid, pin)
     return {"ok": True}
+
+
+@app.post("/api/devices/{pin}/mode")
+async def api_set_device_mode(pin: str, request: Request, body: dict):
+    uid = auth_user_id(request)
+    from app.db import is_pin_owned_by_user
+
+    if not is_pin_owned_by_user(uid, pin):
+        raise HTTPException(status_code=403, detail="forbidden")
+
+    mode = body.get("mode") if isinstance(body, dict) else None
+    try:
+        updated_mode = set_device_mode(pin, str(mode))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"pin": pin, "mode": updated_mode}
+
+
+@app.post("/api/devices/{pin}/change")
+async def api_change_device(pin: str, request: Request, body: dict):
+    uid = auth_user_id(request)
+    from app.db import is_pin_owned_by_user
+
+    if not is_pin_owned_by_user(uid, pin):
+        raise HTTPException(status_code=403, detail="forbidden")
+
+    change = None
+    if isinstance(body, dict):
+        if "change" in body:
+            try:
+                change = int(body.get("change"))
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="invalid change")
+        elif "direction" in body:
+            direction = str(body.get("direction", ""))
+            if direction.lower() == "increment":
+                change = 1
+            elif direction.lower() == "decrement":
+                change = -1
+
+    if change not in (-1, 1):
+        raise HTTPException(status_code=400, detail="change must be -1 or 1")
+
+    ts = int(time.time())
+    new_count = apply_change(pin=pin, change=change, ts=ts)
+    await broadcast(
+        {
+            "pin": pin,
+            "change": change,
+            "new_count": new_count,
+            "ts": ts,
+        }
+    )
+    return {"pin": pin, "change": change, "new_count": new_count, "ts": ts}
 
 
 @app.get("/api/devices/{pin}")

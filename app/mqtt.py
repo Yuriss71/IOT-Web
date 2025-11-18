@@ -2,7 +2,7 @@ import asyncio
 import json
 import time
 from .config import BROKER_URL, BROKER_TOPIC, parse_mqtt_url
-from .db import apply_change
+from .db import apply_change, get_device_mode
 from .ws import broadcast
 
 import aiomqtt as mqtt
@@ -28,13 +28,14 @@ async def mqtt_consumer():
                         except Exception:
                             continue
 
-                        try:
-                            change = int(payload.get("change", 0))
-                        except Exception:
-                            continue
-                        if change not in (-1, 1):
-                            continue
-
+                        # try:
+                        #     change = int(payload.get("change", 0))
+                        # except Exception:
+                        #     continue
+                        # if change not in (-1, 1):
+                        #     continue
+                        mode = get_device_mode(pin)
+                        change = 1 if mode == "increment" else -1
                         new_count = apply_change(pin=pin, change=change, ts=ts)
 
                         await broadcast(
