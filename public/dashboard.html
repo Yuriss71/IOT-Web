@@ -23,6 +23,15 @@
           <button class="rounded-lg bg-neutral-100 text-neutral-900 font-medium px-4 py-2 hover:bg-white sm:h-full">Ajouter</button>
         </form>
         <p id="addDeviceError" class="text-sm text-red-400 mt-2 hidden"></p>
+
+        <hr class="border-neutral-800 my-4" />
+
+        <h2 class="font-medium mb-3">Change RFID</h2>
+        <form id="rfidForm" class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <input id="rfidInput" placeholder="RFID UID" value="00000000" class="w-full rounded-lg bg-neutral-800 border border-neutral-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-neutral-500" />
+          <button class="rounded-lg bg-neutral-100 text-neutral-900 font-medium px-4 py-2 hover:bg-white sm:h-full">Change RFID</button>
+        </form>
+        <p id="rfidError" class="text-sm text-red-400 mt-2 hidden"></p>
       </section>
 
       <section class="md:col-span-2 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
@@ -44,6 +53,7 @@
       const logOutput = document.getElementById('logOutput');
       const websocketStatus = document.getElementById('websocketStatus');
       const addDeviceError = document.getElementById('addDeviceError');
+      const rfidError = document.getElementById('rfidError');
       const deviceMap = new Map(); // pin -> {count}
 
       async function apiFetch(url, options = {}) {
@@ -96,6 +106,18 @@
           const timestamp = new Date(entry.ts * 1000).toLocaleTimeString();
           let changeText = '';
 
+          console.log(entry)
+          if (entry.enabled) {
+              changeText = `✅ Le capteur RFID ${entry.uuid} a activé tous les devices`;
+              return `[${timestamp}] Pin ${entry.pin} : ${changeText}`;
+          } else if (entry.enabled === false) {
+              if (entry.not_authorized) {
+                  changeText = `⚠️ Le capteur RFID ${entry.uuid} n'est pas autorisé à changer l'état des devices`;
+                  return `[${timestamp}] Pin ${entry.pin} : ${changeText}`;
+              }
+              changeText = `❌ Le capteur RFID ${entry.uuid} a désactivé tous les devices`;
+              return `[${timestamp}] Pin ${entry.pin} : ${changeText}`;
+          }
           if (entry.change > 0) {
               changeText = `➕ ${entry.change} entrée${entry.change > 1 ? 's' : ''}`;
           } else if (entry.change < 0) {
@@ -155,6 +177,25 @@
         } catch (error) {
           addDeviceError.textContent = error.message || 'Erreur';
           addDeviceError.classList.remove('hidden');
+        }
+      });
+
+      document.getElementById('rfidForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        rfidError.classList.add('hidden');
+        const rfid_uid = document.getElementById('rfidInput').value.trim() || '00000000';
+        try {
+          const response = await apiFetch('/api/rfid', {
+            method: 'POST',
+            body: JSON.stringify({ rfid_uid })
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({ detail: 'Erreur' }));
+            throw new Error(payload.detail || 'Erreur');
+          }
+        } catch (error) {
+          rfidError.textContent = error.message || 'Erreur';
+          rfidError.classList.remove('hidden');
         }
       });
 

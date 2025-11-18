@@ -14,8 +14,9 @@ from app.db import (
     init_db,
     link_pin_to_user,
     list_user_pins,
+    set_user_rfid,
 )
-from app.mqtt import mqtt_consumer
+from app.mqtt import mqtt_consumer, publish_reset
 from app.ws import router as ws_router
 
 import uvicorn
@@ -164,6 +165,32 @@ async def api_add_device(request: Request, body: dict):
         raise HTTPException(status_code=400, detail="pin required")
     link_pin_to_user(uid, pin)
     return {"ok": True}
+
+
+@app.post("/api/removeDevice/{device_id}")
+async def api_remove_device(device_id: str, request: Request):
+    uid = auth_user_id(request)
+    from app.db import is_pin_owned_by_user
+
+    if not is_pin_owned_by_user(uid, device_id):
+        raise HTTPException(status_code=403, detail="forbidden")
+
+    try:
+        await publish_reset(device_id)
+    except Exception:
+        raise HTTPException(status_code=500, detail="mqtt error")
+
+    return {"ok": True}
+
+
+@app.post("/api/rfid")
+async def api_set_rfid(request: Request, body: dict):
+    uid = auth_user_id(request)
+    rfid_uid = str(body.get("rfid_uid", "")).strip()
+    if not rfid_uid:
+        raise HTTPException(status_code=400, detail="rfid_uid required")
+    set_user_rfid(uid, rfid_uid)
+    return {"ok": True, "rfid_uid": rfid_uid}
 
 
 @app.get("/api/devices/{pin}")
