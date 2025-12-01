@@ -142,7 +142,7 @@
           const toggleButton = document.createElement('button');
           toggleButton.className = 'rounded-lg bg-neutral-100 text-neutral-900 font-medium px-3 py-2 text-sm hover:bg-white transition disabled:opacity-60';
           toggleButton.id = `toggle-${device.pin}`;
-          toggleButton.textContent = `Basculer (${describeMode(mode)})`;
+          toggleButton.textContent = `Basculer`;
           toggleButton.addEventListener('click', () => toggleDeviceMode(device.pin));
 
           const deleteButton = document.createElement('button');
@@ -236,7 +236,7 @@
         const label = document.getElementById(`mode-${pin}`);
         if (label) label.textContent = `Mode actuel: ${describeMode(normalized)}`;
         const button = document.getElementById(`toggle-${pin}`);
-        if (button) button.textContent = `Basculer (${describeMode(normalized)})`;
+        if (button) button.textContent = `Basculer`;
       }
 
       async function toggleDeviceMode(pin) {
