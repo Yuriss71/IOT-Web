@@ -57,6 +57,7 @@
       const websocketStatus = document.getElementById('websocketStatus');
       const addDeviceError = document.getElementById('addDeviceError');
       const rfidError = document.getElementById('rfidError');
+      const rfidInput = document.getElementById('rfidInput');
       const deviceMap = new Map(); // pin -> { count, mode }
 
       const MODE_LABELS = {
@@ -165,6 +166,19 @@
         if (!response.ok) throw new Error('Erreur API');
         const deviceRecords = await response.json();
         return renderDevices(deviceRecords);
+      }
+
+      async function loadCurrentRfid() {
+        if (!rfidInput) return;
+        try {
+          const response = await apiFetch('/api/me');
+          if (!response.ok) return;
+          const payload = await response.json();
+          if (payload && payload.rfid_uid) {
+            rfidInput.value = payload.rfid_uid;
+          }
+        } catch (_) {
+        }
       }
 
       function resolveTimestamp(entry) {
@@ -322,8 +336,9 @@
 
       document.getElementById('rfidForm').addEventListener('submit', async (event) => {
         event.preventDefault();
+        rfidError.style.color = '';
         rfidError.classList.add('hidden');
-        const rfid_uid = document.getElementById('rfidInput').value.trim() || '00000000';
+        const rfid_uid = (rfidInput ? rfidInput.value.trim() : document.getElementById('rfidInput').value.trim()) || '00000000';
         try {
           const response = await apiFetch('/api/rfid', {
             method: 'POST',
@@ -333,7 +348,16 @@
             const payload = await response.json().catch(() => ({ detail: 'Erreur' }));
             throw new Error(payload.detail || 'Erreur');
           }
+          const payload = await response.json().catch(() => ({}));
+          const updatedRfid = (payload && payload.rfid_uid) || rfid_uid;
+          if (rfidInput) {
+            rfidInput.value = updatedRfid;
+          }
+          rfidError.style.color = '#22c55e';
+          rfidError.textContent = `RFID mis à jour : ${updatedRfid}`;
+          rfidError.classList.remove('hidden');
         } catch (error) {
+          rfidError.style.color = '';
           rfidError.textContent = error.message || 'Erreur';
           rfidError.classList.remove('hidden');
         }
@@ -374,6 +398,7 @@
 
       (async () => {
         try {
+          await loadCurrentRfid();
           const pins = await loadDevices();
           await loadInitialLogs(pins);
           connectWebsocket(pins);

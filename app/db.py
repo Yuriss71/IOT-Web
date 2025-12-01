@@ -184,6 +184,17 @@ def set_user_rfid(user_id: int, rfid_uid: str) -> None:
         conn.commit()
 
 
+def get_user_rfid(user_id: int):
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT rfid_uid FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return row["rfid_uid"]
+
+
 def link_pin_to_user(user_id: int, pin: str) -> None:
     with connect() as conn:
         conn.execute(

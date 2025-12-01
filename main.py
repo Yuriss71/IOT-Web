@@ -14,6 +14,7 @@ from app.db import (
     apply_change,
     get_current_count,
     get_logs,
+    get_user_rfid,
     init_db,
     link_pin_to_user,
     list_user_pins,
@@ -155,7 +156,11 @@ async def api_logout():
 @app.get("/api/me")
 async def api_me(request: Request):
     uid = auth_user_id(request)
-    return {"user_id": uid, "pins": list_user_pins(uid)}
+    return {
+        "user_id": uid,
+        "pins": list_user_pins(uid),
+        "rfid_uid": get_user_rfid(uid),
+    }
 
 
 @app.get("/api/devices")
@@ -182,25 +187,19 @@ async def api_delete_device(request: Request, body: dict):
     if not pin:
         raise HTTPException(status_code=400, detail="pin required")
 
-    removed = unlink_pin_from_user(uid, pin)
-    if not removed:
-        raise HTTPException(status_code=404, detail="device not found")
-    return {"ok": True}
-
-
-@app.post("/api/removeDevice/{device_id}")
-async def api_remove_device(device_id: str, request: Request):
-    uid = auth_user_id(request)
     from app.db import is_pin_owned_by_user
 
-    if not is_pin_owned_by_user(uid, device_id):
+    if not is_pin_owned_by_user(uid, pin):
         raise HTTPException(status_code=403, detail="forbidden")
 
     try:
-        await publish_reset(device_id)
+        await publish_reset(pin)
     except Exception:
         raise HTTPException(status_code=500, detail="mqtt error")
 
+    removed = unlink_pin_from_user(uid, pin)
+    if not removed:
+        raise HTTPException(status_code=404, detail="device not found")
     return {"ok": True}
 
 
