@@ -148,6 +148,31 @@ def link_pin_to_user(user_id: int, pin: str) -> None:
         conn.commit()
 
 
+def unlink_pin_from_user(user_id: int, pin: str) -> bool:
+    """Detach a pin from a user and clean up orphaned device data."""
+    with connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM user_devices WHERE user_id = ? AND pin = ?",
+            (user_id, pin),
+        )
+        deleted = cursor.rowcount > 0
+        if not deleted:
+            conn.commit()
+            return False
+
+        still_linked = cursor.execute(
+            "SELECT 1 FROM user_devices WHERE pin = ? LIMIT 1",
+            (pin,),
+        ).fetchone()
+        if not still_linked:
+            cursor.execute("DELETE FROM devices WHERE pin = ?", (pin,))
+            cursor.execute("DELETE FROM logs WHERE pin = ?", (pin,))
+
+        conn.commit()
+        return True
+
+
 def list_user_pins(user_id: int):
     with connect() as conn:
         rows = conn.execute(

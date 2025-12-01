@@ -18,6 +18,7 @@ from app.db import (
     link_pin_to_user,
     list_user_pins,
     set_device_mode,
+    unlink_pin_from_user,
 )
 from app.mqtt import mqtt_consumer
 from app.ws import router as ws_router, broadcast
@@ -167,6 +168,20 @@ async def api_add_device(request: Request, body: dict):
     if not pin:
         raise HTTPException(status_code=400, detail="pin required")
     link_pin_to_user(uid, pin)
+    return {"ok": True}
+
+
+@app.post("/api/deleteDevice")
+async def api_delete_device(request: Request, body: dict):
+    uid = auth_user_id(request)
+    pin = str(body.get("pin", "")) if isinstance(body, dict) else ""
+    pin = pin.strip()
+    if not pin:
+        raise HTTPException(status_code=400, detail="pin required")
+
+    removed = unlink_pin_from_user(uid, pin)
+    if not removed:
+        raise HTTPException(status_code=404, detail="device not found")
     return {"ok": True}
 
 
