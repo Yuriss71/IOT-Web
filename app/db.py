@@ -12,14 +12,6 @@ def connect():
     return conn
 
 
-def _ensure_device_mode_column(cursor):
-    cursor.execute("PRAGMA table_info(devices)")
-    columns = {row[1] for row in cursor.fetchall()}
-    if "mode" not in columns:
-        cursor.execute(
-            "ALTER TABLE devices ADD COLUMN mode TEXT NOT NULL DEFAULT 'increment'"
-        )
-
 def init_db() -> None:
     with connect() as conn:
         cursor = conn.cursor()
@@ -28,7 +20,8 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL
+                password TEXT NOT NULL,
+                rfid_uid TEXT
             )
             """
         )
@@ -36,12 +29,12 @@ def init_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS devices (
                 pin TEXT PRIMARY KEY,
+                enabled BOOLEAN NOT NULL DEFAULT 1,
                 current_count INTEGER NOT NULL DEFAULT 0,
                 mode TEXT NOT NULL DEFAULT 'increment'
             )
             """
         )
-        _ensure_device_mode_column(cursor)
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS user_devices (
@@ -124,6 +117,38 @@ def create_user(username: str, password: str) -> int:
         return int(cursor.lastrowid)
 
 
+def set_user_pins_enabled(pin: str, enabled: bool):
+    """
+    Trouve l'utilisateur associé au 'pin' fourni et active/désactive 
+    TOUS les appareils de cet utilisateur.
+    """
+    val = 1 if enabled else 0
+    with connect() as conn:
+        conn.execute(
+            """
+            UPDATE devices
+            SET enabled = ?
+            WHERE pin IN (
+                SELECT target.pin 
+                FROM user_devices AS target
+                JOIN user_devices AS source ON target.user_id = source.user_id
+                WHERE source.pin = ?
+            )
+            """,
+            (val, pin),
+        )
+        conn.commit()
+
+def get_pin_by_id(pin: str):
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT pin, enabled, current_count FROM devices WHERE pin = ?",
+            (pin,),
+        ).fetchone()
+        if not row:
+            return None
+        return {"pin": row["pin"], "enabled": bool(row["enabled"]), "current_count": row["current_count"]}
+
 def get_user_by_username(username: str):
     with connect() as conn:
         row = conn.execute(
@@ -133,6 +158,30 @@ def get_user_by_username(username: str):
         if not row:
             return None
         return {"id": row["id"], "username": row["username"], "password": row["password"]}
+    
+def get_user_by_device_pin(pin: str):
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT u.id, u.username, u.rfid_uid
+            FROM users u
+            JOIN user_devices ud ON u.id = ud.user_id
+            WHERE ud.pin = ?
+            """,
+            (pin,),
+        ).fetchone()
+        if not row:
+            return None
+        return {"id": row["id"], "username": row["username"], "rfid_uid": row["rfid_uid"]}
+
+
+def set_user_rfid(user_id: int, rfid_uid: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            "UPDATE users SET rfid_uid = ? WHERE id = ?",
+            (rfid_uid, user_id),
+        )
+        conn.commit()
 
 
 def link_pin_to_user(user_id: int, pin: str) -> None:
@@ -177,7 +226,7 @@ def list_user_pins(user_id: int):
     with connect() as conn:
         rows = conn.execute(
             """
-            SELECT d.pin, d.current_count, d.mode
+            SELECT d.pin, d.current_count, d.enabled d.mode
             FROM devices d
             JOIN user_devices ud ON ud.pin = d.pin
             WHERE ud.user_id = ?
@@ -185,14 +234,7 @@ def list_user_pins(user_id: int):
             """,
             (user_id,),
         ).fetchall()
-        return [
-            {
-                "pin": r["pin"],
-                "current_count": r["current_count"],
-                "mode": r["mode"] or DEFAULT_DEVICE_MODE,
-            }
-            for r in rows
-        ]
+        return [{"pin": r["pin"], "current_count": r["current_count"], "enabled": r["enabled"], "mode": r["mode" or DEFAULT_DEVICE_MODE]} for r in rows]
 
 
 def is_pin_owned_by_user(user_id: int, pin: str) -> bool:
