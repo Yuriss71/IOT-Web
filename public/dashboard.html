@@ -37,7 +37,10 @@
       <section class="md:col-span-2 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-medium">Mes devices</h2>
-          <span id="websocketStatus" class="text-sm text-neutral-400">WS: ...</span>
+          <div class="flex flex-col items-end gap-0.5">
+            <span id="totalCount" class="text-lg font-semibold text-neutral-100">Total: 0</span>
+            <span id="websocketStatus" class="text-xs text-neutral-400">WS: ...</span>
+          </div>
         </div>
         <ul id="deviceList" class="mt-3 space-y-2"></ul>
       </section>
@@ -63,6 +66,21 @@
 
       function describeMode(mode) {
         return MODE_LABELS[mode] || MODE_LABELS.increment;
+      }
+
+      function computeTotalCount() {
+        let total = 0;
+        for (const device of deviceMap.values()) {
+          const value = typeof device.count === 'number' ? device.count : 0;
+          total += value;
+        }
+        return total;
+      }
+
+      function updateTotalCountUI() {
+        const totalElement = document.getElementById('totalCount');
+        if (!totalElement) return;
+        totalElement.textContent = 'Total: ' + computeTotalCount();
       }
 
       async function apiFetch(url, options = {}) {
@@ -138,6 +156,7 @@
           item.append(infoWrapper, actionsWrapper);
           deviceList.appendChild(item);
         });
+        updateTotalCountUI();
         return pins;
       }
 
@@ -346,6 +365,7 @@
               deviceMap.get(pin).count = new_count;
               updateDeviceCountUI(pin, new_count);
             }
+            updateTotalCountUI();
             prependLog(message);
           } catch (_) {
           }

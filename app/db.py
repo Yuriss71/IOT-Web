@@ -226,7 +226,7 @@ def list_user_pins(user_id: int):
     with connect() as conn:
         rows = conn.execute(
             """
-            SELECT d.pin, d.current_count, d.enabled d.mode
+            SELECT d.pin, d.current_count, d.enabled, d.mode
             FROM devices d
             JOIN user_devices ud ON ud.pin = d.pin
             WHERE ud.user_id = ?
