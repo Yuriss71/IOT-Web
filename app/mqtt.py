@@ -39,7 +39,6 @@ async def mqtt_consumer():
                         continue
 
                     if action == "toggle":
-                        enabled = bool(payload.get("enabled", True))
                         uuid = payload.get("uuid", "")
                         user = db.get_user_by_device_pin(pin)
                         if user is None:
@@ -57,6 +56,12 @@ async def mqtt_consumer():
                                 }
                             )
                             continue
+
+                        pin_info = db.get_pin_by_id(pin)
+                        if pin_info is None:
+                            continue
+
+                        enabled = not pin_info["enabled"]
 
                         print(f"PIN {pin} -> ENABLED {enabled}")
                         db.set_user_pins_enabled(pin=pin, enabled=enabled)

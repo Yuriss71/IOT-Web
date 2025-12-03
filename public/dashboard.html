@@ -384,12 +384,12 @@
           try {
             const message = JSON.parse(event.data);
             if (message.type === 'subscribed') return;
-            const { pin, change, new_count } = message;
-            if (deviceMap.has(pin)) {
+            const { pin, new_count } = message;
+            if (deviceMap.has(pin) && typeof new_count === 'number') {
               deviceMap.get(pin).count = new_count;
               updateDeviceCountUI(pin, new_count);
+              updateTotalCountUI();
             }
-            updateTotalCountUI();
             prependLog(message);
           } catch (_) {
           }
